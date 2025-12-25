@@ -1,0 +1,25 @@
+.{
+    .name = .herakles,
+    .version = "0.0.0",
+    .fingerprint = 0x217608301497a400,
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .args = .{
+            .url = "git+https://github.com/ikskuh/zig-args?ref=master#e060ac80c244e9675471b6d213b22ddc83cc8f98",
+            .hash = "args-0.0.0-CiLiqo_RAADz2TiHUzG5-0Mk7IZHR-h1SZgUrb_k4c7d",
+        },
+        .zigrc = .{
+            .url = "https://github.com/Aandreba/zigrc/archive/refs/tags/1.1.0.tar.gz",
+            .hash = "zigrc-1.0.0-lENlWzvQAACulrbkL9PVhWjFsWSkYhi7AmfSbCM-2Xlh",
+        },
+        .zigimg = .{
+            .url = "git+https://github.com/zigimg/zigimg.git#eab2522c023b9259db8b13f2f90d609b7437e5f6",
+            .hash = "zigimg-0.1.0-8_eo2vUZFgAAtN1c6dAO5DdqL0d4cEWHtn6iR5ucZJti",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
