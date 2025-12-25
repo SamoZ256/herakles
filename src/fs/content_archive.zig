@@ -189,7 +189,9 @@ const Header = extern struct {
 };
 
 pub const ContentArchive = struct {
+    title_id: u64,
     content_type: ContentArchiveContentType,
+
     root_dir: Directory,
 
     pub fn init(allocator: std.mem.Allocator, keyset: ?crypto.Keyset, encrypted_title_key: ?[0x10]u8, file: *File) !ContentArchive {
@@ -217,6 +219,7 @@ pub const ContentArchive = struct {
             return error.InvalidNcaMagic;
         }
 
+        self.title_id = header.program_id;
         self.content_type = header.content_type;
 
         // Key generation

@@ -34,8 +34,10 @@ pub const Loader = struct {
         }
 
         // NCAs
+        var title_id: ?u64 = null;
         var program_nca: ?fs.ContentArchive = null;
         var control_nca: ?fs.ContentArchive = null;
+
         iter = pfs.root_dir.iterator();
         while (iter.next()) |entry| {
             if (!std.mem.endsWith(u8, entry.key_ptr.*, ".nca")) {
@@ -44,6 +46,18 @@ pub const Loader = struct {
 
             const nca_file = entry.value_ptr.asFile() orelse return error.InvalidPfsContents;
             var content_archive = try fs.ContentArchive.init(allocator, keyset, title_key, nca_file);
+            errdefer content_archive.deinit();
+
+            // Title ID
+            if (title_id) |title_id_| {
+                if (title_id_ != content_archive.title_id) {
+                    return error.TitleIdMismatch;
+                }
+            } else {
+                title_id = content_archive.title_id;
+            }
+
+            // Content
             switch (content_archive.content_type) {
                 .program => program_nca = content_archive,
                 .control => control_nca = content_archive,
@@ -52,6 +66,7 @@ pub const Loader = struct {
         }
 
         // Verify
+        const title_id_ = title_id orelse return error.MissingTitleId;
         var program_nca_ = program_nca orelse return error.MissingProgramNca;
         errdefer program_nca_.deinit();
         var control_nca_ = control_nca orelse return error.MissingControlNca;
@@ -106,9 +121,18 @@ pub const Loader = struct {
 
         try game_dir.addDirectory("meta", meta_dir);
 
+        // Info
+        // TODO: use a proper TOML writer
+        const info = try std.fmt.allocPrint(self.arena.allocator(), "title_id = 0x{x:0>16}\n", .{title_id_});
+        const info_storage = try self.arena.allocator().create(fs.MemoryStorage);
+        info_storage.* = fs.MemoryStorage.init(info);
+        const info_file = fs.File.initWithMemoryStorage(info_storage);
+
+        try game_dir.addFile("info.toml", info_file);
+
         // Get title name
 
-        // We only need to read the American ENglish title name from the NACP
+        // We only need to read the American English title name from the NACP
         var buffer: [1024]u8 = undefined;
         var nacp_reader: fs.FileReader = undefined;
         try nacp.createReader(&nacp_reader, &buffer, 0);
