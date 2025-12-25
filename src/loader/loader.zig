@@ -1,6 +1,7 @@
 const std = @import("std");
 const crypto = @import("../crypto/mod.zig");
 const fs = @import("../fs/mod.zig");
+const ApplicationTitle = @import("application_control_property.zig").ApplicationTitle;
 
 pub const Loader = struct {
     arena: std.heap.ArenaAllocator,
@@ -56,23 +57,23 @@ pub const Loader = struct {
         var control_nca_ = control_nca orelse return error.MissingControlNca;
         errdefer control_nca_.deinit();
 
-        // Convert
-        self.root_dir = try fs.Directory.init(allocator);
-        errdefer self.root_dir.deinit();
+        // Game directory
+        var game_dir = try fs.Directory.init(allocator);
+        errdefer game_dir.deinit();
 
         // ExeFS
         const exefs = try program_nca_.root_dir.getDirectory("code");
-        try self.root_dir.addDirectory("exefs", exefs.*);
+        try game_dir.addDirectory("exefs", exefs.*);
 
         // Loading screen
         const loading_screen = try program_nca_.root_dir.getDirectory("logo");
-        try self.root_dir.addDirectory("loading_screen", loading_screen.*);
+        try game_dir.addDirectory("loading_screen", loading_screen.*);
 
         // RomFS
         var romfs = try fs.RomFS.init(allocator, try program_nca_.root_dir.getFile("data"));
         errdefer romfs.deinit();
 
-        try self.root_dir.addDirectory("romfs", romfs.root_dir);
+        try game_dir.addDirectory("romfs", romfs.root_dir);
 
         // Meta
         var meta = try fs.RomFS.init(allocator, try control_nca_.root_dir.getFile("data"));
@@ -82,7 +83,8 @@ pub const Loader = struct {
         errdefer meta_dir.deinit();
 
         // control.nacp
-        try meta_dir.addFile("control.nacp", (try meta.root_dir.getFile("control.nacp")).*);
+        const nacp = try meta.root_dir.getFile("control.nacp");
+        try meta_dir.addFile("control.nacp", nacp.*);
 
         // Icons
         var icons = try fs.Directory.init(allocator);
@@ -102,7 +104,22 @@ pub const Loader = struct {
 
         try meta_dir.addDirectory("icons", icons);
 
-        try self.root_dir.addDirectory("meta", meta_dir);
+        try game_dir.addDirectory("meta", meta_dir);
+
+        // Get title name
+
+        // We only need to read the American ENglish title name from the NACP
+        var buffer: [1024]u8 = undefined;
+        var nacp_reader: fs.FileReader = undefined;
+        try nacp.createReader(&nacp_reader, &buffer, 0);
+
+        const title = try nacp_reader.interface.takeStruct(ApplicationTitle, .little);
+
+        // Root directory
+        self.root_dir = try fs.Directory.init(allocator);
+        errdefer self.root_dir.deinit();
+
+        try self.root_dir.addDirectory(title.name[0 .. std.mem.indexOfScalar(u8, &title.name, 0) orelse title.name.len], game_dir);
 
         return self;
     }
