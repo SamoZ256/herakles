@@ -73,22 +73,22 @@ pub const Loader = struct {
         errdefer control_nca_.deinit();
 
         // Game directory
-        var game_dir = try fs.Directory.init(allocator);
-        errdefer game_dir.deinit();
+        self.root_dir = try fs.Directory.init(allocator);
+        errdefer self.root_dir.deinit();
 
         // ExeFS
         const exefs = try program_nca_.root_dir.getDirectory("code");
-        try game_dir.addDirectory("exefs", exefs.*);
+        try self.root_dir.addDirectory("exefs", exefs.*);
 
         // Loading screen
         const loading_screen = try program_nca_.root_dir.getDirectory("logo");
-        try game_dir.addDirectory("loading_screen", loading_screen.*);
+        try self.root_dir.addDirectory("loading_screen", loading_screen.*);
 
         // RomFS
         var romfs = try fs.RomFS.init(allocator, try program_nca_.root_dir.getFile("data"));
         errdefer romfs.deinit();
 
-        try game_dir.addDirectory("romfs", romfs.root_dir);
+        try self.root_dir.addDirectory("romfs", romfs.root_dir);
 
         // Meta
         var meta = try fs.RomFS.init(allocator, try control_nca_.root_dir.getFile("data"));
@@ -119,7 +119,7 @@ pub const Loader = struct {
 
         try meta_dir.addDirectory("icons", icons);
 
-        try game_dir.addDirectory("meta", meta_dir);
+        try self.root_dir.addDirectory("meta", meta_dir);
 
         // Info
         // TODO: use a proper TOML writer
@@ -128,22 +128,7 @@ pub const Loader = struct {
         info_storage.* = fs.MemoryStorage.init(info);
         const info_file = fs.File.initWithMemoryStorage(info_storage);
 
-        try game_dir.addFile("info.toml", info_file);
-
-        // Get title name
-
-        // We only need to read the American English title name from the NACP
-        var buffer: [1024]u8 = undefined;
-        var nacp_reader: fs.FileReader = undefined;
-        try nacp.createReader(&nacp_reader, &buffer, 0);
-
-        const title = try nacp_reader.interface.takeStruct(ApplicationTitle, .little);
-
-        // Root directory
-        self.root_dir = try fs.Directory.init(allocator);
-        errdefer self.root_dir.deinit();
-
-        try self.root_dir.addDirectory(title.name[0 .. std.mem.indexOfScalar(u8, &title.name, 0) orelse title.name.len], game_dir);
+        try self.root_dir.addFile("info.toml", info_file);
 
         return self;
     }
