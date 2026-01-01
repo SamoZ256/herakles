@@ -21,7 +21,7 @@ pub fn main() !void {
 
     if (options.positionals.len != 1) {
         // TODO: handle this better
-        std.debug.print("Invalid count of positional arguments\n", .{});
+        std.debug.print("Invalid count of positional arguments (expected 1)\n", .{});
         return error.InvalidArguments;
     }
 
@@ -36,6 +36,7 @@ pub fn main() !void {
     const file = try herakles.fs.File.initWithDiskStorage(&file_storage);
 
     // Loader
+    // TODO: support other loaders as well
     var loader = try herakles.loader.Loader.initNsp(allocator, &file, keyset);
     defer loader.deinit();
 
