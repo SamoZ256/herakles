@@ -129,7 +129,7 @@ pub const Loader = struct {
         // Info
         // TODO: use a proper TOML writer
         const info = try std.fmt.allocPrint(self.arena.allocator(), "title_id = 0x{x:0>16}\n", .{title_id_});
-        const info_storage = try self.arena.allocator().create(fs.MemoryStorage);
+        const info_storage = try allocator.create(fs.MemoryStorage);
         info_storage.* = fs.MemoryStorage.init(info);
         const info_file = fs.File.initWithMemoryStorage(info_storage);
 

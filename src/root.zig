@@ -155,8 +155,7 @@ const CreateContextResult = enum(u32) {
 };
 
 export fn hydra_ext_create_context(options: Slice(Slice(u8, true), true)) ReturnValue(CreateContextResult, ?*anyopaque) {
-    const allocator = std.heap.page_allocator;
-    var arena = std.heap.ArenaAllocator.init(allocator);
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     // Convert options
@@ -167,11 +166,10 @@ export fn hydra_ext_create_context(options: Slice(Slice(u8, true), true)) Return
         options_slice[i] = options.slice()[i].slice();
     }
 
-    // TODO: use different allocator
-    const context_ptr = allocator.create(Context) catch {
+    const context_ptr = std.heap.smp_allocator.create(Context) catch {
         return .{ .res = .allocation_failed, .value = null };
     };
-    errdefer std.heap.page_allocator.destroy(context_ptr);
+    errdefer std.heap.smp_allocator.destroy(context_ptr);
     context_ptr.init(options_slice) catch {
         return .{ .res = .invalid_options, .value = null };
     };
@@ -179,8 +177,7 @@ export fn hydra_ext_create_context(options: Slice(Slice(u8, true), true)) Return
 }
 
 export fn hydra_ext_destroy_context(context: *Context) void {
-    // TODO: use different allocator
-    std.heap.page_allocator.destroy(context);
+    std.heap.smp_allocator.destroy(context);
 }
 
 const QueryResult = enum(u32) {
@@ -202,10 +199,9 @@ const CreateLoaderFromFileResult = enum(u32) {
 };
 
 export fn hydra_ext_create_loader_from_file(context: *Context, hydra_context: *anyopaque, add_file: *const AddFileFnT, root_dir: *anyopaque, path: Slice(u8, true)) CreateLoaderFromFileResult {
-    // TODO: use different allocator
-    const ldr = std.heap.page_allocator.create(Loader) catch return .allocation_failed;
-    errdefer std.heap.page_allocator.destroy(ldr);
-    ldr.init(std.heap.page_allocator, context, hydra_context, add_file, root_dir, path.slice()) catch |err| {
+    const ldr = std.heap.smp_allocator.create(Loader) catch return .allocation_failed;
+    errdefer std.heap.smp_allocator.destroy(ldr);
+    ldr.init(std.heap.smp_allocator, context, hydra_context, add_file, root_dir, path.slice()) catch |err| {
         return switch (err) {
             error.AllocationFailed => .allocation_failed,
             error.UnsupportedFile => .unsupported_file,
@@ -217,8 +213,7 @@ export fn hydra_ext_create_loader_from_file(context: *Context, hydra_context: *a
 export fn hydra_ext_loader_destroy(context: *Context, ldr: *Loader) void {
     _ = context;
     ldr.deinit();
-    // TODO: use different allocator
-    std.heap.page_allocator.destroy(ldr);
+    std.heap.smp_allocator.destroy(ldr);
 }
 
 export fn hydra_ext_file_destroy(file: *FileAdapter) void {
