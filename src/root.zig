@@ -33,6 +33,46 @@ const QueryType = enum(u32) {
     supported_formats = 2,
 };
 
+const Context = struct {
+    keyset: ?crypto.Keyset,
+
+    const Option = extern struct {
+        key: Slice(u8, true),
+        value: Slice(u8, true),
+    };
+
+    const keyset_option_name = "keyset path";
+
+    pub fn init(self: *Context, options: []const Option) error{ InvalidOption, DuplicateOption, InvalidKeysetPath }!void {
+        var keyset_path: ?[]const u8 = null;
+        for (options) |opt| {
+            if (std.mem.eql(u8, opt.key.slice(), keyset_option_name)) {
+                if (keyset_path) |_| return error.DuplicateOption;
+                keyset_path = opt.value.slice();
+            } else {
+                return error.InvalidOption;
+            }
+        }
+
+        if (keyset_path) |keyset_p| {
+            self.keyset = crypto.Keyset.init(keyset_p) catch return error.InvalidKeysetPath;
+        }
+    }
+
+    pub fn query(self: *const Context, what: QueryType, buffer: []u8) error{BufferTooSmall}!usize {
+        _ = self; // TODO: remove
+        const res = switch (what) {
+            .name => "Herakles",
+            .display_version => "v0.0.1",
+            .supported_formats => "nsp", // TODO: only if keyset is valid
+        };
+
+        if (buffer.len < res.len) return error.BufferTooSmall;
+        @memcpy(buffer[0..res.len], res);
+        return res.len;
+    }
+};
+
 const StreamAdapter = struct {
     file: *FileAdapter,
     reader: fs.FileReader,
@@ -54,30 +94,6 @@ const FileAdapter = struct {
 };
 
 const AddFileFnT = fn (hydra_context: *anyopaque, self: *anyopaque, path: Slice(u8, true), file: *FileAdapter) callconv(.c) void;
-
-const Context = struct {
-    keyset: ?crypto.Keyset,
-
-    pub fn init(self: *Context, options: []const []const u8) error{InvalidKeysetPath}!void {
-        // TODO: parse options
-        _ = options;
-
-        self.keyset = crypto.Keyset.init("/Volumes/T7/Documents/switch/keys/18.1.0_Keys/prod.keys") catch return error.InvalidKeysetPath; // HACK
-    }
-
-    pub fn query(self: *const Context, what: QueryType, buffer: []u8) error{BufferTooSmall}!usize {
-        _ = self; // TODO: remove
-        const res = switch (what) {
-            .name => "Herakles",
-            .display_version => "v0.0.1",
-            .supported_formats => "nsp", // TODO: only if keyset is valid
-        };
-
-        if (buffer.len < res.len) return error.BufferTooSmall;
-        @memcpy(buffer[0..res.len], res);
-        return res.len;
-    }
-};
 
 const Loader = struct {
     arena: std.heap.ArenaAllocator,
@@ -151,27 +167,23 @@ export fn hydra_ext_get_api_version() u32 {
 const CreateContextResult = enum(u32) {
     success = 0,
     allocation_failed = 1,
-    invalid_options = 2,
+    invalid_option = 2,
+    duplicate_option = 3,
 };
 
-export fn hydra_ext_create_context(options: Slice(Slice(u8, true), true)) ReturnValue(CreateContextResult, ?*anyopaque) {
+export fn hydra_ext_create_context(options: Slice(Context.Option, true)) ReturnValue(CreateContextResult, ?*anyopaque) {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
-
-    // Convert options
-    const options_slice = arena.allocator().alloc([]const u8, options.len) catch {
-        return .{ .res = .invalid_options, .value = null };
-    };
-    for (0..options.len) |i| {
-        options_slice[i] = options.slice()[i].slice();
-    }
 
     const context_ptr = std.heap.smp_allocator.create(Context) catch {
         return .{ .res = .allocation_failed, .value = null };
     };
     errdefer std.heap.smp_allocator.destroy(context_ptr);
-    context_ptr.init(options_slice) catch {
-        return .{ .res = .invalid_options, .value = null };
+    context_ptr.init(options.slice()) catch |err| {
+        return .{ .res = switch (err) {
+            error.InvalidOption, error.InvalidKeysetPath => .invalid_option,
+            error.DuplicateOption => .duplicate_option,
+        }, .value = null };
     };
     return .{ .res = .success, .value = @ptrCast(context_ptr) };
 }
