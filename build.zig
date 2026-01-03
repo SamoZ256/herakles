@@ -4,15 +4,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Library
     const mod = b.addModule("herakles", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
 
-    // TODO: remove both
-    mod.addImport("zigrc", b.dependency("zigrc", .{ .target = target, .optimize = optimize }).module("zigrc"));
-    mod.addImport("zigimg", b.dependency("zigimg", .{ .target = target, .optimize = optimize }).module("zigimg"));
-
+    // Executable
     const exe = b.addExecutable(.{
         .name = "herakles",
         .root_module = b.createModule(.{
@@ -26,9 +24,20 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.root_module.addImport("args", b.dependency("args", .{ .target = target, .optimize = optimize }).module("args"));
-
     b.installArtifact(exe);
 
+    // Shared Library
+    const lib = b.addLibrary(.{
+        .linkage = .dynamic,
+        .name = "herakles",
+        .root_module = mod,
+        // TODO: version?
+    });
+    b.installArtifact(lib);
+
+    // Steps
+
+    // Run
     const run_step = b.step("run", "Run the app");
 
     const run_cmd = b.addRunArtifact(exe);
@@ -40,6 +49,7 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
+    // Tests
     const mod_tests = b.addTest(.{
         .root_module = mod,
     });

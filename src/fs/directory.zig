@@ -2,7 +2,7 @@ const std = @import("std");
 const OwnedStringMap = @import("../common/owned_string_map.zig").OwnedStringMap;
 const File = @import("file.zig").File;
 
-const Entry = union(enum) {
+pub const Entry = union(enum) {
     file: File,
     directory: Directory,
 

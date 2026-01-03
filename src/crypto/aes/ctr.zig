@@ -41,7 +41,7 @@ pub const Context = struct {
             // Increment counter
             for (0..8) |j| {
                 const index = 16 - j - 1;
-                ctr[index] += 1;
+                ctr[index] +%= 1;
                 if (ctr[index] != 0) break;
             }
         }

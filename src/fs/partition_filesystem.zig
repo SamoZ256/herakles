@@ -50,7 +50,7 @@ pub const PartitionFilesystem = struct {
         const data_offset = string_table_offset + header.string_table_size;
 
         // String table
-        reader.interface.toss(string_table_offset - @sizeOf(Header));
+        _ = try reader.interface.discard(.limited(string_table_offset - @sizeOf(Header)));
         var string_table = try allocator.alloc(u8, header.string_table_size);
         defer allocator.free(string_table);
 

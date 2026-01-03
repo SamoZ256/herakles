@@ -3,8 +3,8 @@ const std = @import("std");
 pub const Keyset = struct {
     // TODO: all keys
     header_key: [0x20]u8,
-    title_keks: [0xe][0x10]u8,
-    key_area_keys: [3][0xe][0x10]u8,
+    title_keks: [0x20][0x10]u8,
+    key_area_keys: [3][0x20][0x10]u8,
 
     pub fn init(path: []const u8) !Keyset {
         var self: Keyset = undefined;

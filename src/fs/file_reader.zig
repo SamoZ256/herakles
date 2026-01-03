@@ -13,10 +13,10 @@ pub const FileReader = struct {
             };
         }
 
-        pub fn seekTo(self: *@This(), offset: u64) !void {
+        pub fn setInitialSeek(self: *@This(), offset: u64) !void {
             return switch (self.*) {
                 .disk => |*disk| try disk.seekTo(offset),
-                .memory => |*memory| memory.toss(offset),
+                .memory => |*memory| _ = try memory.discard(.limited(offset)),
             };
         }
     };

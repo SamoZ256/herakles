@@ -67,7 +67,7 @@ pub const File = struct {
 
     pub fn createReader(self: *const File, reader: *FileReader, buffer: []u8, offset: u64) !void {
         var base = try self.storage.createReader(buffer);
-        try base.seekTo(self.offset + offset);
+        try base.setInitialSeek(self.offset + offset);
         reader.base = base;
 
         // Crypto reader
