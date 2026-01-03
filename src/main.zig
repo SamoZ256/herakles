@@ -11,6 +11,7 @@ pub fn main() !void {
     const options = argsParser.parseForCurrentProcess(struct {
         keyset: ?[]const u8 = null,
         output: ?[]const u8 = null,
+        @"unpack-romfs": bool = true,
 
         pub const shorthands = .{
             .k = "keyset",
@@ -37,7 +38,7 @@ pub fn main() !void {
 
     // Loader
     // TODO: support other loaders as well
-    var loader = try herakles.loader.Loader.initNsp(allocator, &file, keyset);
+    var loader = try herakles.loader.Loader.initNsp(allocator, &file, keyset, options.options.@"unpack-romfs");
     defer loader.deinit();
 
     // Print

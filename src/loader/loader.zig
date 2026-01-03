@@ -7,7 +7,7 @@ pub const Loader = struct {
     arena: std.heap.ArenaAllocator,
     root_dir: fs.Directory,
 
-    pub fn initNsp(allocator: std.mem.Allocator, file: *const fs.File, keyset: ?crypto.Keyset) !Loader {
+    pub fn initNsp(allocator: std.mem.Allocator, file: *const fs.File, keyset: ?crypto.Keyset, unpack_romfs: bool) !Loader {
         var self: Loader = undefined;
         self.arena = std.heap.ArenaAllocator.init(allocator);
 
@@ -85,10 +85,15 @@ pub const Loader = struct {
         try self.root_dir.addDirectory("loading_screen", loading_screen.*);
 
         // RomFS
-        var romfs = try fs.RomFS.init(allocator, try program_nca_.root_dir.getFile("data"));
-        errdefer romfs.deinit();
+        const romfs_file = try program_nca_.root_dir.getFile("data");
+        if (unpack_romfs) {
+            var romfs = try fs.RomFS.init(allocator, romfs_file);
+            errdefer romfs.deinit();
 
-        try self.root_dir.addDirectory("romfs", romfs.root_dir);
+            try self.root_dir.addDirectory("romfs", romfs.root_dir);
+        } else {
+            try self.root_dir.addFile("romfs", romfs_file.*);
+        }
 
         // Meta
         var meta = try fs.RomFS.init(allocator, try control_nca_.root_dir.getFile("data"));

@@ -97,7 +97,7 @@ const Loader = struct {
 
         // Loader
         // TODO: support other loaders as well
-        self.loader = loader.Loader.initNsp(self.arena.allocator(), &self.file, context.keyset) catch return error.UnsupportedFile;
+        self.loader = loader.Loader.initNsp(self.arena.allocator(), &self.file, context.keyset, false) catch return error.UnsupportedFile;
 
         // Add to root
         const shared_buffer = self.arena.allocator().alloc(u8, 1024) catch return error.AllocationFailed;
