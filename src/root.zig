@@ -34,55 +34,83 @@ const QueryType = enum(u32) {
 };
 
 const StreamAdapter = struct {
-    file: *const fs.File,
+    file: *FileAdapter,
     reader: fs.FileReader,
     seek: u64,
-    size: u64,
 };
 
 const StreamInterface = extern struct {
-    handle: *anyopaque,
-    get_seek: *const fn (stream: *anyopaque) callconv(.c) u64 = getSeek,
-    seek_to: *const fn (stream: *anyopaque, seek: u64) callconv(.c) void = seekTo,
-    seek_by: *const fn (stream: *anyopaque, offset: u64) callconv(.c) void = seekBy,
-    get_size: *const fn (stream: *anyopaque) callconv(.c) u64 = getSize,
-    read_raw: *const fn (stream: *anyopaque, buffer: Slice(u8, false)) callconv(.c) void = readRaw,
+    destroy: *const fn (stream: *StreamAdapter) callconv(.c) void = deinit,
+    get_seek: *const fn (stream: *StreamAdapter) callconv(.c) u64 = getSeek,
+    seek_to: *const fn (stream: *StreamAdapter, seek: u64) callconv(.c) void = seekTo,
+    seek_by: *const fn (stream: *StreamAdapter, offset: u64) callconv(.c) void = seekBy,
+    get_size: *const fn (stream: *StreamAdapter) callconv(.c) u64 = getSize,
+    read_raw: *const fn (stream: *StreamAdapter, buffer: Slice(u8, false)) callconv(.c) void = readRaw,
 
-    fn getSeek(stream: *anyopaque) callconv(.c) u64 {
-        const adapter: *StreamAdapter = @ptrCast(@alignCast(stream));
-        return adapter.seek;
+    fn deinit(stream: *StreamAdapter) callconv(.c) void {
+        stream.file.allocator.allocator().destroy(stream);
     }
 
-    fn seekTo(stream: *anyopaque, seek: u64) callconv(.c) void {
-        const adapter: *StreamAdapter = @ptrCast(@alignCast(stream));
-        if (seek >= adapter.seek) {
-            _ = adapter.reader.interface.discard(.limited(seek - adapter.seek)) catch |err| std.debug.panic("Failed to seek to {}: {}", .{ seek, err });
-            adapter.seek = seek;
+    fn getSeek(stream: *StreamAdapter) callconv(.c) u64 {
+        return stream.seek;
+    }
+
+    fn seekTo(stream: *StreamAdapter, seek: u64) callconv(.c) void {
+        if (seek >= stream.seek) {
+            _ = stream.reader.interface.discard(.limited(seek - stream.seek)) catch |err| std.debug.panic("Failed to seek to {}: {}", .{ seek, err });
+            stream.seek = seek;
             return;
         }
 
-        adapter.file.createReader(&adapter.reader, adapter.reader.interface.buffer, seek) catch |err| std.debug.panic("Failed to seek to {}: {}", .{ seek, err });
-        adapter.seek = seek;
+        stream.file.file.createReader(&stream.reader, stream.reader.interface.buffer, seek) catch |err| std.debug.panic("Failed to seek to {}: {}", .{ seek, err });
+        stream.seek = seek;
     }
 
-    fn seekBy(stream: *anyopaque, offset: u64) callconv(.c) void {
-        const adapter: *StreamAdapter = @ptrCast(@alignCast(stream));
-        _ = adapter.reader.interface.discard(.limited(offset)) catch |err| std.debug.panic("Failed to seek by {}: {}", .{ offset, err });
+    fn seekBy(stream: *StreamAdapter, offset: u64) callconv(.c) void {
+        _ = stream.reader.interface.discard(.limited(offset)) catch |err| std.debug.panic("Failed to seek by {}: {}", .{ offset, err });
     }
 
-    fn getSize(stream: *anyopaque) callconv(.c) u64 {
-        const adapter: *StreamAdapter = @ptrCast(@alignCast(stream));
-        return adapter.size;
+    fn getSize(stream: *StreamAdapter) callconv(.c) u64 {
+        return stream.file.file.size;
     }
 
-    fn readRaw(stream: *anyopaque, buffer: Slice(u8, false)) callconv(.c) void {
-        const adapter: *StreamAdapter = @ptrCast(@alignCast(stream));
-        adapter.reader.interface.readSliceAll(buffer.slice()) catch |err| std.debug.panic("Failed to read data: {}", .{err});
-        adapter.seek += buffer.len;
+    fn readRaw(stream: *StreamAdapter, buffer: Slice(u8, false)) callconv(.c) void {
+        _ = stream.reader.interface.readSliceAll(buffer.slice()) catch |err| std.debug.panic("Failed to read data: {}", .{err});
+        stream.seek += buffer.len;
     }
 };
 
-const AddFileFnT = fn (self: *anyopaque, path: Slice(u8, true), stream: StreamInterface) callconv(.c) void;
+const FileAdapter = struct {
+    file: *const fs.File,
+    allocator: std.heap.FixedBufferAllocator,
+    shared_buffer: []u8,
+
+    pub fn init(self: *FileAdapter, allocator: std.mem.Allocator, file: *const fs.File, shared_buffer: []u8) !void {
+        self.file = file;
+        self.allocator = std.heap.FixedBufferAllocator.init(try allocator.alloc(u8, 1024));
+        self.shared_buffer = shared_buffer;
+    }
+};
+
+const FileInterface = extern struct {
+    open: *const fn (file: *FileAdapter) callconv(.c) *StreamAdapter = openImpl,
+    get_size: *const fn (file: *FileAdapter) callconv(.c) u64 = getSize,
+
+    fn openImpl(file: *FileAdapter) callconv(.c) *StreamAdapter {
+        const adapter = file.allocator.allocator().create(StreamAdapter) catch std.debug.panic("Failed to allocate memory", .{});
+        adapter.file = file;
+        file.file.createReader(&adapter.reader, file.shared_buffer, 0) catch std.debug.panic("Failed to create reader", .{});
+        adapter.seek = 0;
+
+        return adapter;
+    }
+
+    fn getSize(file: *FileAdapter) callconv(.c) u64 {
+        return file.file.size;
+    }
+};
+
+const AddFileFnT = fn (hydra_context: *anyopaque, self: *anyopaque, path: Slice(u8, true), file: *FileAdapter) callconv(.c) void;
 
 const Context = struct {
     keyset: ?crypto.Keyset,
@@ -115,7 +143,7 @@ const Loader = struct {
     file: fs.File,
     loader: loader.Loader,
 
-    pub fn init(self: *Loader, allocator: std.mem.Allocator, context: *const Context, add_file: *const AddFileFnT, root_dir: *anyopaque, path: []const u8) error{ AllocationFailed, UnsupportedFile }!void {
+    pub fn init(self: *Loader, allocator: std.mem.Allocator, context: *const Context, hydra_context: *anyopaque, add_file: *const AddFileFnT, root_dir: *anyopaque, path: []const u8) error{ AllocationFailed, UnsupportedFile }!void {
         self.arena = std.heap.ArenaAllocator.init(allocator);
 
         // File
@@ -129,10 +157,10 @@ const Loader = struct {
         self.loader = loader.Loader.initNsp(self.arena.allocator(), &self.file, context.keyset) catch return error.UnsupportedFile;
 
         // Add to root
-        const buffer = self.arena.allocator().alloc(u8, 1024) catch return error.AllocationFailed;
+        const shared_buffer = self.arena.allocator().alloc(u8, 1024) catch return error.AllocationFailed;
         var iter = self.loader.root_dir.iterator();
         while (iter.next()) |entry| {
-            process(self.arena.allocator(), add_file, root_dir, entry.value_ptr, entry.key_ptr.*, buffer) catch return error.AllocationFailed;
+            process(self.arena.allocator(), hydra_context, add_file, root_dir, entry.value_ptr, entry.key_ptr.*, shared_buffer) catch return error.AllocationFailed;
         }
     }
 
@@ -143,32 +171,25 @@ const Loader = struct {
     }
 
     // Add helpers
-    fn processFile(allocator: std.mem.Allocator, add_file: *const AddFileFnT, root_dir: *anyopaque, file: *const fs.File, path: []const u8, buffer: []u8) anyerror!void {
-        const adapter = try allocator.create(StreamAdapter);
-        adapter.file = file;
-        try file.createReader(&adapter.reader, buffer, 0);
-        adapter.seek = 0;
-        adapter.size = file.size;
+    fn processFile(allocator: std.mem.Allocator, hydra_context: *anyopaque, add_file: *const AddFileFnT, root_dir: *anyopaque, file: *const fs.File, path: []const u8, shared_buffer: []u8) anyerror!void {
+        const adapter = try allocator.create(FileAdapter);
+        try adapter.init(allocator, file, shared_buffer);
 
-        const interface = StreamInterface{
-            .handle = adapter,
-        };
-
-        add_file(root_dir, Slice(u8, true).init(path), interface);
+        add_file(hydra_context, root_dir, Slice(u8, true).init(path), adapter);
     }
 
-    fn processDirectory(allocator: std.mem.Allocator, add_file: *const AddFileFnT, root_dir: *anyopaque, dir: *const fs.Directory, path: []const u8, buffer: []u8) anyerror!void {
+    fn processDirectory(allocator: std.mem.Allocator, hydra_context: *anyopaque, add_file: *const AddFileFnT, root_dir: *anyopaque, dir: *const fs.Directory, path: []const u8, shared_buffer: []u8) anyerror!void {
         var iter = dir.iterator();
         while (iter.next()) |entry| {
             const crnt_path = try std.fs.path.join(allocator, &[_][]const u8{ path, entry.key_ptr.* });
-            try process(allocator, add_file, root_dir, entry.value_ptr, crnt_path, buffer);
+            try process(allocator, hydra_context, add_file, root_dir, entry.value_ptr, crnt_path, shared_buffer);
         }
     }
 
-    fn process(allocator: std.mem.Allocator, add_file: *const AddFileFnT, root_dir: *anyopaque, entry: *const fs.Entry, path: []const u8, buffer: []u8) anyerror!void {
+    fn process(allocator: std.mem.Allocator, hydra_context: *anyopaque, add_file: *const AddFileFnT, root_dir: *anyopaque, entry: *const fs.Entry, path: []const u8, shared_buffer: []u8) anyerror!void {
         switch (entry.*) {
-            .file => |*file| try processFile(allocator, add_file, root_dir, file, path, buffer),
-            .directory => |*directory| try processDirectory(allocator, add_file, root_dir, directory, path, buffer),
+            .file => |*file| try processFile(allocator, hydra_context, add_file, root_dir, file, path, shared_buffer),
+            .directory => |*directory| try processDirectory(allocator, hydra_context, add_file, root_dir, directory, path, shared_buffer),
         }
     }
 };
@@ -231,17 +252,27 @@ export fn hydra_ext_query(context: *Context, what: QueryType, buffer: Slice(u8, 
     return .{ .res = .success, .value = @intCast(ret) };
 }
 
+export fn hydra_ext_get_stream_interface(context: *Context) StreamInterface {
+    _ = context;
+    return .{};
+}
+
+export fn hydra_ext_get_file_interface(context: *Context) FileInterface {
+    _ = context;
+    return .{};
+}
+
 const CreateLoaderFromFileResult = enum(u32) {
     success = 0,
     allocation_failed = 1,
     unsupported_file = 2,
 };
 
-export fn hydra_ext_create_loader_from_file(context: *Context, add_file: *const AddFileFnT, root_dir: *anyopaque, path: Slice(u8, true)) CreateLoaderFromFileResult {
+export fn hydra_ext_create_loader_from_file(context: *Context, hydra_context: *anyopaque, add_file: *const AddFileFnT, root_dir: *anyopaque, path: Slice(u8, true)) CreateLoaderFromFileResult {
     // TODO: use different allocator
     const ldr = std.heap.page_allocator.create(Loader) catch return .allocation_failed;
     errdefer std.heap.page_allocator.destroy(ldr);
-    ldr.init(std.heap.page_allocator, context, add_file, root_dir, path.slice()) catch |err| {
+    ldr.init(std.heap.page_allocator, context, hydra_context, add_file, root_dir, path.slice()) catch |err| {
         return switch (err) {
             error.AllocationFailed => .allocation_failed,
             error.UnsupportedFile => .unsupported_file,
