@@ -21,9 +21,10 @@ pub const Reader = struct {
         };
     }
 
-    // TODO: discard and readVec
+    // TODO: readVec
     const vtable = std.io.Reader.VTable{
         .stream = stream,
+        .discard = discard,
     };
 
     fn stream(r: *std.io.Reader, w: *std.io.Writer, limit: std.io.Limit) std.io.Reader.StreamError!usize {
@@ -39,6 +40,15 @@ pub const Reader = struct {
 
         self.offset += n;
         w.advance(n);
+        return n;
+    }
+
+    fn discard(r: *std.io.Reader, limit: std.io.Limit) std.io.Reader.Error!usize {
+        const self: *Reader = @alignCast(@fieldParentPtr("interface", r));
+
+        // Discard
+        const n = try self.in.discard(limit);
+        self.offset += n;
         return n;
     }
 };
