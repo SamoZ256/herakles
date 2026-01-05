@@ -52,7 +52,7 @@ const supported_formats = "nsp";
 
 const keyset_path_option_name = "keyset path";
 const keyset_path_option_description = "A path to the prod.keys file";
-const keyset_path_option_content_types = ".keys";
+const keyset_path_option_content_types = "file.keys";
 const keyset_path_option = OptionConfig{
     .name = Slice(u8, true).init(keyset_path_option_name[0..]),
     .description = Slice(u8, true).init(keyset_path_option_description[0..]),
@@ -85,6 +85,8 @@ const Context = struct {
 
         if (keyset_path) |keyset_p| {
             self.keyset = crypto.Keyset.init(keyset_p) catch return error.InvalidKeysetPath;
+        } else {
+            self.keyset = null;
         }
     }
 };
