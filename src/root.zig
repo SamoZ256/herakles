@@ -27,11 +27,42 @@ fn Slice(comptime T: type, comptime is_const: bool) type {
     };
 }
 
-const QueryType = enum(u32) {
-    name = 0,
-    display_version = 1,
-    supported_formats = 2,
+const OptionType = enum(u32) {
+    boolean = 0,
+    integer = 1,
+    enumeration = 2,
+    string = 3,
+    path = 4,
 };
+
+const OptionConfig = extern struct {
+    name: Slice(u8, true),
+    description: Slice(u8, true),
+    type: OptionType,
+    is_required: bool,
+    data: extern union {
+        enum_value_names: Slice(u8, true),
+        path_content_types: Slice(u8, true),
+    },
+};
+
+const name = "Herakles";
+const display_version = "v0.0.1";
+const supported_formats = "nsp";
+
+const keyset_path_option_name = "keyset path";
+const keyset_path_option_description = "A path to the prod.keys file";
+const keyset_path_option_content_types = ".keys";
+const keyset_path_option = OptionConfig{
+    .name = Slice(u8, true).init(keyset_path_option_name[0..]),
+    .description = Slice(u8, true).init(keyset_path_option_description[0..]),
+    .type = .path,
+    .is_required = true, // TODO: make non-mandatory
+    .data = .{
+        .path_content_types = Slice(u8, true).init(keyset_path_option_content_types[0..]),
+    },
+};
+const option_configs = [_]OptionConfig{keyset_path_option};
 
 const Context = struct {
     keyset: ?crypto.Keyset,
@@ -41,12 +72,10 @@ const Context = struct {
         value: Slice(u8, true),
     };
 
-    const keyset_option_name = "keyset path";
-
     pub fn init(self: *Context, options: []const Option) error{ InvalidOption, DuplicateOption, InvalidKeysetPath }!void {
         var keyset_path: ?[]const u8 = null;
         for (options) |opt| {
-            if (std.mem.eql(u8, opt.key.slice(), keyset_option_name)) {
+            if (std.mem.eql(u8, opt.key.slice(), keyset_path_option_name)) {
                 if (keyset_path) |_| return error.DuplicateOption;
                 keyset_path = opt.value.slice();
             } else {
@@ -57,19 +86,6 @@ const Context = struct {
         if (keyset_path) |keyset_p| {
             self.keyset = crypto.Keyset.init(keyset_p) catch return error.InvalidKeysetPath;
         }
-    }
-
-    pub fn query(self: *const Context, what: QueryType, buffer: []u8) error{BufferTooSmall}!usize {
-        _ = self; // TODO: remove
-        const res = switch (what) {
-            .name => "Herakles",
-            .display_version => "v0.0.1",
-            .supported_formats => "nsp", // TODO: only if keyset is valid
-        };
-
-        if (buffer.len < res.len) return error.BufferTooSmall;
-        @memcpy(buffer[0..res.len], res);
-        return res.len;
     }
 };
 
@@ -164,11 +180,28 @@ export fn hydra_ext_get_api_version() u32 {
     return 1;
 }
 
+const QueryType = enum(u32) {
+    name = 0,
+    display_version = 1,
+    supported_formats = 2,
+    option_configs = 3,
+};
+
+export fn hydra_ext_query(what: QueryType) Slice(u8, true) {
+    const res = switch (what) {
+        .name => name[0..],
+        .display_version => display_version[0..],
+        .supported_formats => supported_formats[0..],
+        .option_configs => @as([]const u8, @ptrCast(&option_configs)),
+    };
+
+    return Slice(u8, true).init(res);
+}
+
 const CreateContextResult = enum(u32) {
     success = 0,
     allocation_failed = 1,
     invalid_option = 2,
-    duplicate_option = 3,
 };
 
 export fn hydra_ext_create_context(options: Slice(Context.Option, true)) ReturnValue(CreateContextResult, ?*anyopaque) {
@@ -179,29 +212,14 @@ export fn hydra_ext_create_context(options: Slice(Context.Option, true)) ReturnV
         return .{ .res = .allocation_failed, .value = null };
     };
     errdefer std.heap.smp_allocator.destroy(context_ptr);
-    context_ptr.init(options.slice()) catch |err| {
-        return .{ .res = switch (err) {
-            error.InvalidOption, error.InvalidKeysetPath => .invalid_option,
-            error.DuplicateOption => .duplicate_option,
-        }, .value = null };
+    context_ptr.init(options.slice()) catch {
+        return .{ .res = .invalid_option, .value = null };
     };
     return .{ .res = .success, .value = @ptrCast(context_ptr) };
 }
 
 export fn hydra_ext_destroy_context(context: *Context) void {
     std.heap.smp_allocator.destroy(context);
-}
-
-const QueryResult = enum(u32) {
-    success = 0,
-    buffer_too_small = 1,
-};
-
-export fn hydra_ext_query(context: *Context, what: QueryType, buffer: Slice(u8, false)) ReturnValue(QueryResult, u64) {
-    const ret = context.query(what, buffer.slice()) catch {
-        return .{ .res = .buffer_too_small, .value = 0 };
-    };
-    return .{ .res = .success, .value = @intCast(ret) };
 }
 
 const CreateLoaderFromFileResult = enum(u32) {
