@@ -34,7 +34,7 @@ pub const PartitionFilesystem = struct {
         var self: PartitionFilesystem = undefined;
         self.root_dir = try Directory.init(allocator);
 
-        var buffer: [8192]u8 = undefined;
+        var buffer: [0x800]u8 = undefined;
         var reader: FileReader = undefined;
         try file.createReader(&reader, &buffer, 0);
 

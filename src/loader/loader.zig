@@ -49,11 +49,7 @@ pub const Loader = struct {
             errdefer content_archive.deinit();
 
             // Title ID
-            if (title_id) |title_id_| {
-                if (title_id_ != content_archive.title_id) {
-                    return error.TitleIdMismatch;
-                }
-            } else {
+            if (content_archive.content_type == .program and title_id == null) {
                 title_id = content_archive.title_id;
             }
 

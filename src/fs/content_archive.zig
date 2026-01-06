@@ -208,7 +208,7 @@ pub const ContentArchive = struct {
         file.setCrypto(crypto.aes.Context.initXts(ks.header_key, 0x200), 0);
 
         // Reader
-        var buffer: [8192]u8 = undefined;
+        var buffer: [@sizeOf(Header)]u8 = undefined;
         var reader: FileReader = undefined;
         try file.createReader(&reader, &buffer, 0);
 

@@ -50,7 +50,7 @@ const RomFSParser = struct {
         self.data_file = data_file;
 
         // File meta
-        var buffer: [8192]u8 = undefined;
+        var buffer: [0x800]u8 = undefined;
         var reader: FileReader = undefined;
         try file.createReader(&reader, &buffer, file_meta_loc.offset);
         self.file_meta = try reader.interface.readAlloc(self.allocator.allocator(), file_meta_loc.size);
