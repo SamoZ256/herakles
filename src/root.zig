@@ -48,7 +48,7 @@ const OptionConfig = extern struct {
 
 const name = "Herakles";
 const display_version = "v0.0.1";
-const supported_formats = "nsp";
+const supported_formats = "nsp,xci";
 
 const keyset_path_option_name = "keyset path";
 const keyset_path_option_description = "A path to the prod.keys file";
@@ -130,8 +130,8 @@ const Loader = struct {
         self.file = fs.File.initWithDiskStorage(&self.file_storage) catch return error.UnsupportedFile;
 
         // Loader
-        // TODO: support other loaders as well
-        self.loader = loader.Loader.initNsp(self.arena.allocator(), &self.file, context.keyset, false) catch return error.UnsupportedFile;
+        const extension = std.fs.path.extension(path);
+        self.loader = (if (std.mem.eql(u8, extension, ".nsp")) loader.Loader.initNsp(self.arena.allocator(), &self.file, context.keyset, false) else if (std.mem.eql(u8, extension, ".xci")) loader.Loader.initXci(self.arena.allocator(), &self.file, context.keyset, false) else std.debug.panic("Invalid file extension \"{s}\"\n", .{extension})) catch return error.UnsupportedFile;
 
         // Add to root
         const shared_buffer = self.arena.allocator().alloc(u8, 1024) catch return error.AllocationFailed;

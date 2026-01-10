@@ -33,12 +33,36 @@ pub const Loader = struct {
             std.debug.print("Title key (encrypted): {x}\n", .{title_key.?});
         }
 
+        try self.processPartition(allocator, keyset, title_key, &pfs.root_dir, unpack_romfs);
+
+        return self;
+    }
+
+    pub fn initXci(allocator: std.mem.Allocator, file: *const fs.File, keyset: ?crypto.Keyset, unpack_romfs: bool) !Loader {
+        var self: Loader = undefined;
+        self.arena = std.heap.ArenaAllocator.init(allocator);
+
+        // Cartridge image
+        var ci = try fs.CartridgeImage.init(allocator, file);
+        defer ci.deinit();
+
+        try self.processPartition(allocator, keyset, null, try ci.root_dir.getDirectory("secure"), unpack_romfs);
+
+        return self;
+    }
+
+    pub fn deinit(self: *Loader) void {
+        self.root_dir.deinit();
+        self.arena.deinit();
+    }
+
+    fn processPartition(self: *Loader, allocator: std.mem.Allocator, keyset: ?crypto.Keyset, title_key: ?[0x10]u8, dir: *const fs.Directory, unpack_romfs: bool) !void {
         // NCAs
         var title_id: ?u64 = null;
         var program_nca: ?fs.ContentArchive = null;
         var control_nca: ?fs.ContentArchive = null;
 
-        iter = pfs.root_dir.iterator();
+        var iter = dir.iterator();
         while (iter.next()) |entry| {
             if (!std.mem.endsWith(u8, entry.key_ptr.*, ".nca")) {
                 continue;
@@ -130,13 +154,6 @@ pub const Loader = struct {
         const info_file = fs.File.initWithMemoryStorage(info_storage);
 
         try self.root_dir.addFile("info.toml", info_file);
-
-        return self;
-    }
-
-    pub fn deinit(self: *Loader) void {
-        self.root_dir.deinit();
-        self.arena.deinit();
     }
 
     pub fn save(self: *const Loader, allocator: std.mem.Allocator, path: []const u8) !void {

@@ -56,7 +56,7 @@ pub const Directory = struct {
         self.entries.deinit();
     }
 
-    fn addEntry(self: *Directory, name: []const u8, entry: Entry) !void {
+    pub fn addEntry(self: *Directory, name: []const u8, entry: Entry) !void {
         _ = try self.entries.put(name, entry);
     }
 

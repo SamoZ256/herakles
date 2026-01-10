@@ -8,4 +8,5 @@ pub const Entry = directory.Entry;
 pub const Directory = directory.Directory;
 pub const PartitionFilesystem = @import("partition_filesystem.zig").PartitionFilesystem;
 pub const ContentArchive = @import("content_archive.zig").ContentArchive;
+pub const CartridgeImage = @import("cartridge_image.zig").CartridgeImage;
 pub const RomFS = @import("romfs.zig").RomFS;

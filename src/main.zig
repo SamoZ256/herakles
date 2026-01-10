@@ -30,15 +30,17 @@ pub fn main() !void {
     const keyset: ?herakles.crypto.Keyset = if (options.options.keyset) |keyset_path| try herakles.crypto.Keyset.init(keyset_path) else null;
 
     // File
-    const file_handle = try std.fs.openFileAbsolute(options.positionals[0], .{});
+    const path = options.positionals[0];
+    const file_handle = try std.fs.openFileAbsolute(path, .{});
     defer file_handle.close();
 
     const file_storage = herakles.fs.DiskStorage.init(&file_handle);
     const file = try herakles.fs.File.initWithDiskStorage(&file_storage);
 
     // Loader
-    // TODO: support other loaders as well
-    var loader = try herakles.loader.Loader.initNsp(allocator, &file, keyset, options.options.@"unpack-romfs");
+    const extension = std.fs.path.extension(path);
+    const unpack_romfs = options.options.@"unpack-romfs";
+    var loader = if (std.mem.eql(u8, extension, ".nsp")) try herakles.loader.Loader.initNsp(allocator, &file, keyset, unpack_romfs) else if (std.mem.eql(u8, extension, ".xci")) try herakles.loader.Loader.initXci(allocator, &file, keyset, unpack_romfs) else std.debug.panic("Invalid file extension \"{s}\"\n", .{extension});
     defer loader.deinit();
 
     // Print
