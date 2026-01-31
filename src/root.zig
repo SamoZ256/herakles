@@ -106,7 +106,7 @@ const FileAdapter = struct {
     pub fn init(self: *FileAdapter, ldr: *Loader, allocator: std.mem.Allocator, file: *const fs.File, shared_buffer: []u8) !void {
         self.loader = ldr;
         self.file = file;
-        self.allocator = std.heap.FixedBufferAllocator.init(try allocator.alloc(u8, 1024));
+        self.allocator = std.heap.FixedBufferAllocator.init(try allocator.alloc(u8, @sizeOf(StreamAdapter) * 4));
         self.shared_buffer = shared_buffer;
     }
 };
