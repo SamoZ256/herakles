@@ -1,0 +1,149 @@
+name: macOS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "**"
+      - "!.github/**"
+      - ".github/workflows/ci.yml"
+      - "!**.md"
+
+  pull_request:
+    paths:
+      - "**"
+      - "!.github/**"
+      - ".github/workflows/ci.yml"
+      - "!**.md"
+
+jobs:
+  macOS:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suffix: arm64
+          - suffix: x86
+
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout Herakles
+        uses: actions/checkout@v6
+        with:
+          repository: SamoZ256/herakles
+          submodules: recursive
+          path: herakles
+
+      - name: Install Dependencies
+        run: |
+          if [[ "${{ matrix.suffix }}" == *"x86"* ]]; then
+            echo "Installing x86_64 deps under Rosetta"
+
+            arch -x86_64 /bin/bash -c '
+              export HOMEBREW_PREFIX=/usr/local
+              export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+              if ! command -v brew >/dev/null; then
+                echo "Installing Intel Homebrew"
+                NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+              fi
+              brew install zig
+            '
+          else
+            echo "Installing arm64 deps"
+            brew install zig
+          fi
+
+      - name: Build Herakles
+        run: |
+          cd herakles
+          if [[ ${{ matrix.suffix }} == *'x86'* ]]; then
+            arch -x86_64 /bin/zsh
+            zig build
+          else
+            zig build
+          fi
+          mkdir build-${{ matrix.suffix }}
+          mv ./zig-out/bin/herakles build-${{ matrix.suffix }}/herakles
+          mv ./zig-out/lib/libherakles.dylib build-${{ matrix.suffix }}/libherakles.dylib
+
+      - name: Upload Executable
+        uses: actions/upload-artifact@v6
+        with:
+          name: herakles-${{ matrix.suffix }}
+          path: herakles/build-${{ matrix.suffix }}/herakles
+          if-no-files-found: error
+
+      - name: Upload Plugin
+        uses: actions/upload-artifact@v6
+        with:
+          name: libherakles.dylib-${{ matrix.suffix }}
+          path: herakles/build-${{ matrix.suffix }}/libherakles.dylib
+          if-no-files-found: error
+
+  Lipo:
+    name: macOS Universal Binary
+    needs: macOS
+    runs-on: macos-15
+
+    steps:
+      - name: Download Arm Executable
+        uses: actions/download-artifact@v7
+        with:
+          name: herakles-arm64
+          path: herakles/build-arm64/herakles
+
+      - name: Download Arm Plugin
+        uses: actions/download-artifact@v7
+        with:
+          name: libherakles.dylib-arm64
+          path: herakles/build-arm64/libherakles.dylib
+
+      - name: Download x86 Executable
+        uses: actions/download-artifact@v7
+        with:
+          name: herakles-x86
+          path: herakles/build-x86/herakles
+
+      - name: Download x86 Plugin
+        uses: actions/download-artifact@v7
+        with:
+          name: libherakles.dylib-x86
+          path: herakles/build-x86/libherakles.dylib
+
+      - name: Create Universal Binaries
+        run: |
+          ls
+          lipo -create herakles/build-x86/herakles herakles/build-arm64/herakles -output herakles
+          lipo -create herakles/build-x86/libherakles.dylib herakles/build-arm64/libherakles.dylib -output libherakles.dylib
+
+      - name: Delete x86 and Arm builds
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            herakles-arm64
+            herakles-arm64
+            libherakles.dylib-x86
+            libherakles.dylib-arm64
+
+      - name: Create Archive
+        run: |
+          chmod +rxw herakles
+          tar cv herakles | gzip -9 > Herakles.tar.gz
+          chmod +rxw libherakles.dylib
+          tar cv libherakles.dylib | gzip -9 > Herakles-Plugin.tar.gz
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Herakles
+          path: Herakles.tar.gz
+          if-no-files-found: error
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Herakles-Plugin
+          path: Herakles-Plugin.tar.gz
+          if-no-files-found: error
