@@ -70,43 +70,36 @@ jobs:
     needs: macOS
     runs-on: macos-15
 
-    env:
-      ACTIONS_STEP_DEBUG: true
-
     steps:
       - name: Download Arm Executable
         uses: actions/download-artifact@v7
         with:
           name: herakles-arm64
-          path: herakles/build-arm64/herakles
+          path: build-arm64
 
       - name: Download Arm Plugin
         uses: actions/download-artifact@v7
         with:
           name: libherakles.dylib-arm64
-          path: herakles/build-arm64/libherakles.dylib
+          path: build-arm64
 
       - name: Download x86 Executable
         uses: actions/download-artifact@v7
         with:
           name: herakles-x86
-          path: herakles/build-x86/herakles
+          path: build-x86
 
       - name: Download x86 Plugin
         uses: actions/download-artifact@v7
         with:
           name: libherakles.dylib-x86
-          path: herakles/build-x86/libherakles.dylib
+          path: build-x86
 
       - name: Create Universal Binaries
         run: |
           mkdir bin
-          cd herakles/build-arm64
-          echo "ls:" && ls
-          cd herakles && echo "ls:" && ls
-          mkdir bin
-          lipo -output bin/herakles -create herakles/build-arm64/herakles herakles/build-x86/herakles
-          lipo -output bin/libherakles.dylib -create herakles/build-arm64/libherakles.dylib herakles/build-x86/libherakles.dylib
+          lipo -output bin/herakles -create build-arm64/herakles build-x86/herakles
+          lipo -output bin/libherakles.dylib -create build-arm64/libherakles.dylib build-x86/libherakles.dylib
 
       - name: Delete x86 and Arm builds
         uses: geekyeggo/delete-artifact@v5
