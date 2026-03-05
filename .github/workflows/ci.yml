@@ -97,10 +97,13 @@ jobs:
 
       - name: Create Universal Binaries
         run: |
-          cd herakles
           mkdir bin
-          lipo -output bin/herakles -create build-arm64/herakles build-x86/herakles
-          lipo -output bin/libherakles.dylib -create build-arm64/libherakles.dylib build-x86/libherakles.dylib
+          cd herakles/build-arm64
+          otool -L herakles && otool L libherakles.dylib
+          cd ../build-x86
+          otool -L herakles && otool L libherakles.dylib
+          lipo -output bin/herakles -create herakles/build-arm64/herakles herakles/build-x86/herakles
+          lipo -output bin/libherakles.dylib -create herakles/build-arm64/libherakles.dylib herakles/build-x86/libherakles.dylib
 
       - name: Delete x86 and Arm builds
         uses: geekyeggo/delete-artifact@v5
