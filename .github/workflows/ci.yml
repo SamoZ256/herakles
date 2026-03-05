@@ -1,0 +1,138 @@
+name: macOS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "**"
+      - "!.github/**"
+      - ".github/workflows/ci.yml"
+      - "!**.md"
+
+  pull_request:
+    paths:
+      - "**"
+      - "!.github/**"
+      - ".github/workflows/ci.yml"
+      - "!**.md"
+
+jobs:
+  macOS:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suffix: arm64
+          - suffix: x86
+
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout Herakles
+        uses: actions/checkout@v6
+        with:
+          repository: SamoZ256/herakles
+          submodules: recursive
+          path: herakles
+
+      - name: Install Dependencies
+        run: |
+          brew install zig
+
+      - name: Build Herakles
+        run: |
+          cd herakles
+          if [[ ${{ matrix.suffix }} == *'x86'* ]]; then
+            zig build -Dtarget="x86_64-macos"
+          else
+            zig build
+          fi
+          mkdir build-${{ matrix.suffix }}
+          mv ./zig-out/bin/herakles build-${{ matrix.suffix }}/herakles
+          mv ./zig-out/lib/libherakles.dylib build-${{ matrix.suffix }}/libherakles.dylib
+
+      - name: Upload Executable
+        uses: actions/upload-artifact@v6
+        with:
+          name: herakles-${{ matrix.suffix }}
+          path: herakles/build-${{ matrix.suffix }}/herakles
+          if-no-files-found: error
+
+      - name: Upload Plugin
+        uses: actions/upload-artifact@v6
+        with:
+          name: libherakles.dylib-${{ matrix.suffix }}
+          path: herakles/build-${{ matrix.suffix }}/libherakles.dylib
+          if-no-files-found: error
+
+  Lipo:
+    name: macOS Universal Binary
+    needs: macOS
+    runs-on: macos-15
+
+    steps:
+      - name: Download Arm Executable
+        uses: actions/download-artifact@v7
+        with:
+          name: herakles-arm64
+          path: herakles/build-arm64/herakles
+
+      - name: Download Arm Plugin
+        uses: actions/download-artifact@v7
+        with:
+          name: libherakles.dylib-arm64
+          path: herakles/build-arm64/libherakles.dylib
+
+      - name: Download x86 Executable
+        uses: actions/download-artifact@v7
+        with:
+          name: herakles-x86
+          path: herakles/build-x86/herakles
+
+      - name: Download x86 Plugin
+        uses: actions/download-artifact@v7
+        with:
+          name: libherakles.dylib-x86
+          path: herakles/build-x86/libherakles.dylib
+
+      - name: Create Universal Binaries
+        run: |
+          mkdir bin
+          cd herakles/build-arm64
+          otool -L herakles && otool L libherakles.dylib
+          cd ../build-x86
+          otool -L herakles && otool L libherakles.dylib
+          lipo -output bin/herakles -create herakles/build-arm64/herakles herakles/build-x86/herakles
+          lipo -output bin/libherakles.dylib -create herakles/build-arm64/libherakles.dylib herakles/build-x86/libherakles.dylib
+
+      - name: Delete x86 and Arm builds
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            herakles-arm64
+            herakles-arm64
+            libherakles.dylib-x86
+            libherakles.dylib-arm64
+
+      - name: Create Archive
+        run: |
+          mv bin/herakles herakles
+          chmod +rxw herakles
+          tar cv herakles | gzip -9 > Herakles.tar.gz
+          mv bin/libherakles.dylib libherakles.dylib
+          chmod +rxw libherakles.dylib
+          tar cv libherakles.dylib | gzip -9 > Herakles-Plugin.tar.gz
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Herakles
+          path: Herakles.tar.gz
+          if-no-files-found: error
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Herakles-Plugin
+          path: Herakles-Plugin.tar.gz
+          if-no-files-found: error
