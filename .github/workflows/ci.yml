@@ -100,8 +100,10 @@ jobs:
           mkdir bin
           ls
           cd herakles && ls
-          lipo -output bin/herakles -create build-arm64/herakles build-x86/herakles
-          lipo -output bin/libherakles.dylib -create build-arm64/libherakles.dylib build-x86/libherakles.dylib
+          cd build-arm64 && ls
+          cd .. && cd .. && ls
+          lipo -output bin/herakles -create herakles/build-arm64/herakles herakles/build-x86/herakles
+          lipo -output bin/libherakles.dylib -create herakles/build-arm64/libherakles.dylib herakles/build-x86/libherakles.dylib
 
       - name: Delete x86 and Arm builds
         uses: geekyeggo/delete-artifact@v5
