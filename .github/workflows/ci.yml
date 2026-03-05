@@ -102,9 +102,11 @@ jobs:
         run: |
           mkdir bin
           cd herakles/build-arm64
-          otool -L herakles && otool L libherakles.dylib || echo "error"
+          echo "ls:" && ls
+          otool -L herakles || echo "error: otool didn't work on herakles arm" && otool L libherakles.dylib || echo "error: otool didn't work on libherakles.dylib arm"
+          cd herakles && echo "ls:" && ls
           cd ../build-x86
-          otool -L herakles && otool L libherakles.dylib || echo "error"
+          otool -L herakles || echo "error: otool didn't work on herakles x86" && otool L libherakles.dylib || echo "error: otool didn't work on libherakles.dylib x86"
           cd .. && cd ..
           lipo -output bin/herakles -create herakles/build-arm64/herakles herakles/build-x86/herakles
           lipo -output bin/libherakles.dylib -create herakles/build-arm64/libherakles.dylib herakles/build-x86/libherakles.dylib
