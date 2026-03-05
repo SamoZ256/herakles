@@ -106,7 +106,7 @@ jobs:
         with:
           name: |
             herakles-arm64
-            herakles-arm64
+            herakles-x86
             libherakles.dylib-x86
             libherakles.dylib-arm64
 
